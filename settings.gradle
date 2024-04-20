@@ -1,0 +1,5 @@
+rootProject.name = 'Divert-Java'
+include 'pni-template'
+include 'core'
+include 'test'
+

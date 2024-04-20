@@ -1,0 +1,178 @@
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
+    def PNI_VERSION = '21.0.0.19'
+    ext.set("PNI_VERSION", PNI_VERSION)
+    dependencies {
+        classpath group: 'io.vproxy', name: 'pni-exec', version: PNI_VERSION
+    }
+}
+
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'signing'
+}
+
+group = 'io.vproxy'
+version = loadVersion()
+
+subprojects {
+    apply plugin: 'java-library'
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
+    java {
+        withSourcesJar()
+    }
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+
+    tasks.withType(JavaCompile) {
+        options.encoding = "UTF-8"
+        options.incremental = false
+        options.compilerArgs += '--enable-preview'
+    }
+    tasks.withType(JavaExec) {
+        jvmArgs += '--enable-preview'
+        jvmArgs += '--enable-native-access=ALL-UNNAMED'
+    }
+
+    task javadocJar(type: Jar) {
+        archiveClassifier = 'javadoc'
+        from "$buildDir/docs/javadoc"
+    }
+
+    def releaseProjects = ['core']
+    if (releaseProjects.contains(project.name)) {
+        publishing {
+            publications {
+                maven(MavenPublication) {
+                    from components.java
+                    artifactId 'divert-java-' + project.name
+
+                    artifact(javadocJar)
+
+                    pom {
+                        name = 'divert-java-' + project.name
+                        description = 'WinDivert java binding: ' + project.name
+                        url = 'https://vproxy.io'
+                        licenses {
+                            license {
+                                name = 'MIT License'
+                                url = 'https://github.com/vproxy-tools/Divert-Java/blob/master/LICENSE'
+                            }
+                        }
+                        developers {
+                            developer {
+                                id = 'wkgcass'
+                                name = 'K.G. Wang'
+                                email = 'wkgcass@hotmail.com'
+                            }
+                        }
+                        scm {
+                            connection = 'scm:git:git://github.com/vproxy-tools/Divert-Java.git'
+                            developerConnection = 'scm:git:git://github.com/vproxy-tools/Divert-Java.git'
+                            url = 'https://github.com/vproxy-tools/Divert-Java'
+                        }
+                    }
+                }
+            }
+            repositories {
+                maven {
+                    credentials {
+                        username 'wkgcass'
+                        password System.getProperty("MavenPublishPassword")
+                    }
+                    def releasesRepoUrl = 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
+                    url = releasesRepoUrl
+                }
+            }
+        }
+        if (!System.getProperty("MavenLocalInstall", "false").equals("true")) {
+            signing {
+                sign publishing.publications.maven
+            }
+        }
+    }
+}
+
+project(':pni-template') {
+    dependencies {
+        implementation group: 'io.vproxy', name: 'pni-api-jdk21', version: PNI_VERSION
+    }
+    compileJava {
+        options.compilerArgs += '-parameters'
+    }
+    task pniGenerate() {
+        dependsOn compileJava
+
+        def workingDir = project.rootProject.rootDir.getAbsolutePath()
+        def gen = new io.vproxy.pni.exec.Generator(
+                new io.vproxy.pni.exec.CompilerOptions()
+                        .setClasspath(List.of(workingDir + '/pni-template/build/classes/java/main'))
+                        .setJavaOutputBaseDirectory(workingDir + '/core/src/main/generated')
+                        .setCOutputDirectory(workingDir + '/core/src/main/c-generated')
+                        .setCompilationFlag(io.vproxy.pni.exec.CompilationFlag.TYPE_NAME_PREFIX, "")
+                        .setCompilationFlag(io.vproxy.pni.exec.CompilationFlag.ALWAYS_ALIGNED)
+        )
+
+        doLast {
+            gen.generate()
+        }
+    }
+}
+
+project(':core') {
+    sourceSets {
+        main {
+            java {
+                srcDirs = ['src/main/java', 'src/main/generated']
+            }
+        }
+    }
+    dependencies {
+        api group: 'io.vproxy', name: 'pni-api-jdk21', version: PNI_VERSION
+        api group: 'io.vproxy', name: 'commons', version: '1.2.2'
+    }
+}
+
+project(':test') {
+    dependencies {
+        implementation project(':core')
+        testImplementation group: 'junit', name: 'junit', version: '4.12'
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+
+    task runPoc(type: JavaExec) {
+        standardInput = System.in
+        if ("true" == System.getProperty("enableAssertions")) {
+            enableAssertions = true
+        }
+        classpath = sourceSets.test.runtimeClasspath
+        workingDir = project.rootProject.rootDir.getAbsolutePath()
+        main = "io.vproxy.windivert.test.poc." + System.getProperty("Poc")
+    }
+}
+
+def loadVersion() {
+    def PREFIX = "public static final String VERSION = \""
+    def SUFFIX = "\"; // _THE_VERSION_"
+    def ver = file(projectDir.getAbsolutePath() + "/core/src/main/java/io/vproxy/windivert/Version.java")
+    def lines = ver.getText().split("\n")
+    for (def line : lines) {
+        line = line.trim()
+        if (line.startsWith(PREFIX) && line.endsWith(SUFFIX)) {
+            def verstr = line.substring(PREFIX.length(), line.length() - SUFFIX.length())
+            return verstr
+        }
+    }
+    return "unknown"
+}
