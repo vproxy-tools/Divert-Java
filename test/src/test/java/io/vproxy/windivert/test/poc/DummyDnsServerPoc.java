@@ -165,8 +165,7 @@ public class DummyDnsServerPoc {
         dnsResponse.answers.add(answer);
 
         var dnsData = Formatter.format(dnsResponse);
-        udp.setData(new PacketBytes(dnsData));
-        udp.setLength(dnsData.length() + 8);
+        udp.setData(dnsData);
         udp.setDstPort(udp.getSrcPort());
         udp.setSrcPort(53);
 

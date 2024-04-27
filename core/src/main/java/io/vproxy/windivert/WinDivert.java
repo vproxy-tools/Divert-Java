@@ -2,6 +2,7 @@ package io.vproxy.windivert;
 
 import io.vproxy.base.util.LogType;
 import io.vproxy.base.util.Logger;
+import io.vproxy.base.util.OS;
 import io.vproxy.base.util.Utils;
 import io.vproxy.base.util.bytearray.MemorySegmentByteArray;
 import io.vproxy.pni.Allocator;
@@ -15,7 +16,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.foreign.MemorySegment;
-import java.nio.file.Files;
 
 public class WinDivert {
     private static final String DRIVER_NAME = "vproxy_windivert";
@@ -67,9 +67,9 @@ public class WinDivert {
         }
 
         File sysFile = null;
-        try (var sysStream = WinDivert.class.getResourceAsStream(STR."/io/vproxy/windivert/WinDivert64-\{Version.WINDIVERT_VERSION}.sys")) {
+        try (var sysStream = WinDivert.class.getResourceAsStream(STR."/io/vproxy/windivert/WinDivert64-\{OS.arch()}.sys")) {
             if (sysStream == null) {
-                Logger.warn(LogType.ALERT, "unable to find WinDivert64.sys, please make sure the driver is already loaded");
+                Logger.warn(LogType.ALERT, STR."unable to find WinDivert64-\{OS.arch()}.sys, please make sure the driver is already loaded");
                 return;
             }
 
@@ -101,14 +101,14 @@ public class WinDivert {
             return true;
         }
         try {
-            execute(STR."sc.exe stop \{DRIVER_NAME}");
+            Utils.execute(STR."sc.exe stop \{DRIVER_NAME}", true);
         } catch (Exception e) {
             Logger.error(LogType.SYS_ERROR, e.getMessage());
             return false;
         }
         Utils.ExecuteResult res;
         try {
-            res = execute(STR."sc.exe delete \{DRIVER_NAME}");
+            res = Utils.execute(STR."sc.exe delete \{DRIVER_NAME}", true);
         } catch (Exception e) {
             Logger.error(LogType.SYS_ERROR, e.getMessage());
             return false;
@@ -120,16 +120,9 @@ public class WinDivert {
         return false;
     }
 
-    private static Utils.ExecuteResult execute(String script) throws Exception {
-        var scriptFile = Files.createTempFile("script-", ".bat");
-        Files.writeString(scriptFile, script);
-        var pb = new ProcessBuilder("cmd.exe", "/c", scriptFile.toAbsolutePath().toString());
-        return Utils.execute(pb, 10 * 1000, true);
-    }
-
     private static boolean isSysLoaded() {
         try {
-            var res = execute(STR."sc.exe query \{DRIVER_NAME}");
+            var res = Utils.execute(STR."sc.exe query \{DRIVER_NAME}", true);
             return res.exitCode == 0;
         } catch (Exception e) {
             throw new UnsatisfiedLinkError(STR."failed to query loaded drivers, \{Utils.formatErr(e)}");
@@ -138,7 +131,7 @@ public class WinDivert {
 
     private static void createDriver(String file) {
         try {
-            var res = execute(STR."sc.exe create \{DRIVER_NAME} binpath=\{file} type=kernel start=demand");
+            var res = Utils.execute(STR."sc.exe create \{DRIVER_NAME} binpath=\{file} type=kernel start=demand", true);
             if (res.exitCode != 0) {
                 throw new UnsatisfiedLinkError(STR."failed to create driver, exitCode=\{res.exitCode}\nstdout:\n\{res.stdout}\nstderr:\n\{res.stderr}");
             }
@@ -149,7 +142,7 @@ public class WinDivert {
 
     private static void startDriver() {
         try {
-            var res = execute(STR."sc.exe start \{DRIVER_NAME}");
+            var res = Utils.execute(STR."sc.exe start \{DRIVER_NAME}", true);
             if (res.exitCode == 0) {
                 return;
             }
@@ -163,38 +156,7 @@ public class WinDivert {
     }
 
     private static void loadDLL() {
-        UnsatisfiedLinkError savedErr;
-        try {
-            System.loadLibrary("WinDivert");
-            return;
-        } catch (UnsatisfiedLinkError e) {
-            savedErr = e;
-        }
-        File dllFile = null;
-        try (var dllStream = WinDivert.class.getResourceAsStream(STR."/io/vproxy/windivert/WinDivert-\{Version.WINDIVERT_VERSION}.dll")) {
-            if (dllStream == null) {
-                throw savedErr;
-            }
-
-            dllFile = File.createTempFile("WinDivert", ".dll");
-            try (var dllFileStream = new FileOutputStream(dllFile)) {
-                dllStream.transferTo(dllFileStream);
-            }
-
-            try {
-                System.load(dllFile.getAbsolutePath());
-            } catch (UnsatisfiedLinkError e) {
-                throw new UnsatisfiedLinkError(STR."Failed to load \{dllFile.getAbsolutePath()}: \{e.getMessage()}");
-            }
-        } catch (IOException e) {
-            Logger.error(LogType.FILE_ERROR, "failed to release WinDivert.dll");
-            throw new UnsatisfiedLinkError("failed to release WinDivert.dll");
-        } finally {
-            if (dllFile != null) {
-                //noinspection ResultOfMethodCallIgnored
-                dllFile.delete();
-            }
-        }
+        Utils.loadDynamicLibrary("WinDivert", WinDivert.class.getClassLoader(), "io/vproxy/windivert/");
     }
 
     private final MemorySegment handle;
