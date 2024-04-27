@@ -136,7 +136,7 @@ public class DNSResponder {
                 continue;
             }
 
-            Logger.trace(LogType.ALERT, STR."lookup \{q.qname} \{q.qclass}");
+            Logger.trace(LogType.ALERT, STR."lookup \{q.qname} \{q.qtype}");
 
             var host = q.qname;
             if (!host.endsWith(".")) {
