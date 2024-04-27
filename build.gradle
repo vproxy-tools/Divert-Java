@@ -159,7 +159,7 @@ project(':core') {
     }
     dependencies {
         api group: 'io.vproxy', name: 'pni-api-jdk21', version: PNI_VERSION
-        api group: 'io.vproxy', name: 'commons', version: '1.3.2'
+        api group: 'io.vproxy', name: 'commons', version: '1.3.3'
     }
 }
 
