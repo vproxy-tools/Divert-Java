@@ -10,15 +10,31 @@ You will need at least JDK 21.
 
 ### Dependency
 
+#### core
+
 ```groovy
-implementation 'io.vproxy:divert-java-core:1.0.0'
+implementation 'io.vproxy:divert-java-core:1.0.1'
 ```
 
 ```xml
 <dependency>
   <groupId>io.vproxy</groupId>
   <artifactId>divert-java-core</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
+</dependency>
+```
+
+#### HostsManager
+
+```groovy
+implementation 'io.vproxy:divert-java-hostsmanager:1.0.1'
+```
+
+```xml
+<dependency>
+  <groupId>io.vproxy</groupId>
+  <artifactId>divert-java-hostsmanager</artifactId>
+  <version>1.0.1</version>
 </dependency>
 ```
 
