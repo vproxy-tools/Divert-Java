@@ -131,7 +131,7 @@ public class WinDivert {
 
     private static void createDriver(String file) {
         try {
-            var res = Utils.execute(STR."sc.exe create \{DRIVER_NAME} binpath=\{file} type=kernel start=demand", true);
+            var res = Utils.execute(STR."sc.exe create \{DRIVER_NAME} binpath=\{Utils.escapePath(file)} type=kernel start=demand", true);
             if (res.exitCode != 0) {
                 throw new UnsatisfiedLinkError(STR."failed to create driver, exitCode=\{res.exitCode}\nstdout:\n\{res.stdout}\nstderr:\n\{res.stderr}");
             }
