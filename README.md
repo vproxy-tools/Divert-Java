@@ -13,14 +13,14 @@ You will need at least JDK 21.
 #### core
 
 ```groovy
-implementation 'io.vproxy:divert-java-core:1.0.3'
+implementation 'io.vproxy:divert-java-core:1.0.4'
 ```
 
 ```xml
 <dependency>
   <groupId>io.vproxy</groupId>
   <artifactId>divert-java-core</artifactId>
-  <version>1.0.3</version>
+  <version>1.0.4</version>
 </dependency>
 ```
 
