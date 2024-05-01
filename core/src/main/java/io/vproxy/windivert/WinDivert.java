@@ -15,6 +15,7 @@ import io.vproxy.vpacket.PacketDataBuffer;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.foreign.MemorySegment;
 
 public class WinDivert {
@@ -130,8 +131,18 @@ public class WinDivert {
     }
 
     private static void createDriver(String file) {
+        file = STR."binpath=\{file}";
         try {
-            var res = Utils.execute(STR."sc.exe create \{DRIVER_NAME} binpath=\{Utils.escapePath(file)} type=kernel start=demand", true);
+            var bytes = file.getBytes("GBK");
+            file = new String(bytes, "GBK");
+        } catch (UnsupportedEncodingException ignore) {
+            // ignore error if GBK is not supported
+        }
+        try {
+            var pb = new ProcessBuilder("sc.exe", "create", DRIVER_NAME,
+                file, "type=kernel", "start=demand");
+            Logger.alert(STR."trying to execute command: \{pb.command()}");
+            var res = Utils.execute(pb, 2_000, true);
             if (res.exitCode != 0) {
                 throw new UnsatisfiedLinkError(STR."failed to create driver, exitCode=\{res.exitCode}\nstdout:\n\{res.stdout}\nstderr:\n\{res.stderr}");
             }
