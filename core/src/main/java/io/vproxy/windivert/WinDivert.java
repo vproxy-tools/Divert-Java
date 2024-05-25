@@ -17,46 +17,81 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.foreign.MemorySegment;
+import java.util.HashSet;
+import java.util.Set;
 
 public class WinDivert {
-    private static final String DRIVER_NAME = "vproxy_windivert";
-    private static volatile boolean isLoaded = false;
+    private static final String DRIVER_NAME = "WinDivert";
+    private static final Set<String> ALTERNATIVE_DRIVER_NAMES = Set.of("vproxy_windivert");
+    private static volatile boolean isLoadedBySelf = false;
+    private static volatile boolean isLoadedByOthers = false;
+    private static volatile boolean isDllLoaded = false;
 
     public static boolean isLoaded() {
-        return isLoaded;
+        if (isLoadedBySelf || isLoadedByOthers) {
+            isLoadedBySelf = isLoadedByOthers = openTest();
+        }
+        return isLoadedBySelf || isLoadedByOthers;
+    }
+
+    private static boolean openTest() {
+        loadDLL();
+        var divert = doOpen("outbound && udp.DstPort == 65535 && udp.DstPort == 65534",
+            WinDivertLayer.WINDIVERT_LAYER_NETWORK, 0, 0);
+        if (divert == null) {
+            return false;
+        }
+        divert.close();
+        return true;
     }
 
     public static void load() throws UnsatisfiedLinkError {
-        if (isLoaded) {
+        if (isLoaded()) {
+            return;
+        }
+        if (openTest()) {
+            isLoadedByOthers = true;
             return;
         }
         synchronized (WinDivert.class) {
-            if (isLoaded) {
+            if (isLoaded()) {
                 return;
             }
             try {
                 loadSys();
             } catch (Throwable t) {
-                Logger.warn(LogType.SYS_ERROR, "failed to load driver, try to unload then reload", t);
+                Logger.warn(LogType.SYS_ERROR, "failed to load driver, trying to unload then reload", t);
                 unloadSys();
                 loadSys();
             }
-            loadDLL();
-            isLoaded = true;
+            if (!openTest()) {
+                Logger.warn(LogType.SYS_ERROR, "the driver seems to be loaded but is not working properly, " +
+                                               "trying to unload all possible drivers then reload");
+                unloadAllSys();
+                loadSys();
+                if (!openTest()) {
+                    Logger.error(LogType.SYS_ERROR, "the driver is still not working properly, " +
+                                                    "will unload all possible drivers");
+                    unloadAllSys();
+                    isLoadedBySelf = isLoadedByOthers = false; // ensure the states cleared
+                    throw new UnsatisfiedLinkError("failed to load driver");
+                }
+            }
+            isLoadedBySelf = true;
         }
     }
 
     public static void unload() {
-        if (!isLoaded) {
+        if (!isLoadedBySelf) {
             return;
         }
         synchronized (WinDivert.class) {
-            if (!isLoaded) {
+            if (!isLoadedBySelf) {
                 return;
             }
             var ok = unloadSys();
             if (ok) {
-                isLoaded = false;
+                isLoadedBySelf = false;
             }
         }
     }
@@ -92,13 +127,13 @@ public class WinDivert {
     }
 
     private static boolean unloadSys() {
-        boolean isLoaded;
+        boolean isSysLoaded;
         try {
-            isLoaded = isSysLoaded();
+            isSysLoaded = isSysLoaded();
         } catch (Throwable t) {
             return false;
         }
-        if (!isLoaded) {
+        if (!isSysLoaded) {
             return true;
         }
         try {
@@ -140,7 +175,7 @@ public class WinDivert {
         }
         try {
             var pb = new ProcessBuilder("sc.exe", "create", DRIVER_NAME,
-                file, "type=kernel", "start=demand");
+                file, "type=kernel", "start=demand", "error=normal");
             Logger.alert(STR."trying to execute command: \{pb.command()}");
             var res = Utils.execute(pb, 2_000, true);
             if (res.exitCode != 0) {
@@ -166,8 +201,31 @@ public class WinDivert {
         }
     }
 
+    private static void unloadAllSys() {
+        var all = new HashSet<String>();
+        all.add(DRIVER_NAME);
+        all.addAll(ALTERNATIVE_DRIVER_NAMES);
+        for (var n : all) {
+            try {
+                // ignore output and errors
+                Utils.execute(STR."sc.exe stop \{n}", true);
+                Utils.execute(STR."sc.exe delete \{n}", true);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     private static void loadDLL() {
-        Utils.loadDynamicLibrary("WinDivert", WinDivert.class.getClassLoader(), "io/vproxy/windivert/");
+        if (isDllLoaded) {
+            return;
+        }
+        synchronized (WinDivert.class) {
+            if (isDllLoaded) {
+                return;
+            }
+            Utils.loadDynamicLibrary("WinDivert", WinDivert.class.getClassLoader(), "io/vproxy/windivert/");
+            isDllLoaded = true;
+        }
     }
 
     private final MemorySegment handle;
@@ -187,13 +245,20 @@ public class WinDivert {
 
     public static WinDivert open(String filter, WinDivertLayer layer, int priority, long flags) throws WinDivertException {
         load();
+        var divert = doOpen(filter, layer, priority, flags);
+        if (divert == null) {
+            throw new WinDivertException("failed to open WinDivert");
+        }
+        return divert;
+    }
 
+    private static WinDivert doOpen(String filter, WinDivertLayer layer, int priority, long flags) {
         MemorySegment handle;
         try (var allocator = Allocator.ofConfined()) {
             var filterNative = new PNIString(allocator, filter);
             handle = io.vproxy.windivert.pni.WinDivert.get().open(filterNative, layer.value, (short) priority, flags);
-            if (handle == null) {
-                throw new WinDivertException("failed to open WinDivert");
+            if (handle == null || handle.address() == -1) {
+                return null;
             }
         }
         return new WinDivert(handle);
