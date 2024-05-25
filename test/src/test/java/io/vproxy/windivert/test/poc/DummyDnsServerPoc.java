@@ -82,6 +82,7 @@ public class DummyDnsServerPoc {
     private static boolean handleOne(AbstractIpPacket pkt, WinDivert divert, WinDivertRcvSndCtx ctx) throws Exception {
         Logger.alert(STR."found packet: \{pkt.description()}");
         Logger.alert(STR."windivert addr: \{ctx.addr}");
+        Logger.alert(STR."delta timestamp in millis: \{ctx.getDeltaTimestampMillis()}");
 
         if (!ctx.addr.isOutbound()) {
             Logger.error(LogType.INVALID_EXTERNAL_DATA, "the packet is inbound");

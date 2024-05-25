@@ -275,6 +275,9 @@ public class WinDivert {
         }
         if (ctx.plen.get(0) == 0)
             return null;
+        if (ctx.recordedTimestampTicks == 0) {
+            ctx.recordedTimestampTicks = ctx.addr.getTimestamp();
+        }
         return ctx.buf.reinterpret(ctx.plen.get(0));
     }
 
