@@ -35,10 +35,17 @@ public class WinDivert {
     }
 
     private static boolean openTest() {
+        var wasDLLLoaded = isDllLoaded;
         loadDLL();
         var divert = doOpen("outbound && udp.DstPort == 65535 && udp.DstPort == 65534",
             WinDivertLayer.WINDIVERT_LAYER_NETWORK, 0, 0);
         if (divert == null) {
+            if (!wasDLLLoaded) {
+                // first time using divert
+                // the service would be automatically created by windivert
+                // which will be invalid in most cases since we release the .sys with a different name
+                unloadSysForce();
+            }
             return false;
         }
         divert.close();
@@ -198,6 +205,15 @@ public class WinDivert {
             throw new UnsatisfiedLinkError(STR."failed to start driver, exitCode=\{res.exitCode}\nstdout:\n\{res.stdout}\nstderr:\n\{res.stderr}");
         } catch (Exception e) {
             throw new UnsatisfiedLinkError(STR."failed to start driver, \{Utils.formatErr(e)}");
+        }
+    }
+
+    private static void unloadSysForce() {
+        try {
+            // ignore output and errors
+            Utils.execute(STR."sc.exe stop \{DRIVER_NAME}", true);
+            Utils.execute(STR."sc.exe delete \{DRIVER_NAME}", true);
+        } catch (Throwable ignore) {
         }
     }
 
