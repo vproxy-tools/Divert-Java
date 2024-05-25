@@ -44,8 +44,8 @@ implementation 'io.vproxy:divert-java-hostsmanager:1.0.2'
 import io.vproxy.windivert.*;
 import io.vproxy.pni.Allocator;
 
-
-var divert = Divert.open(); // load driver and DLL, then open WinDivert handle
+// load driver and DLL, then open WinDivert handle
+var divert = Divert.open("outbound && udp.DstPort == 53");
 
 // receiving and sending thread
 new Thread(() -> {
