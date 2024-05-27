@@ -22,7 +22,11 @@ import java.util.Set;
 
 public class WinDivert {
     private static final String DRIVER_NAME = "WinDivert";
-    private static final Set<String> ALTERNATIVE_DRIVER_NAMES = Set.of("vproxy_windivert");
+    private static final Set<String> ALTERNATIVE_DRIVER_NAMES = Set.of(
+        "vproxy_windivert",
+        "WinDivert1.0"
+    );
+    private static final Set<String> OLD_DRIVERS = Set.of("vproxy_windivert");
     private static volatile boolean isLoadedBySelf = false;
     private static volatile boolean isLoadedByOthers = false;
     private static volatile boolean isDllLoaded = false;
@@ -56,6 +60,7 @@ public class WinDivert {
         if (isLoaded()) {
             return;
         }
+        unloadOldSys();
         if (openTest()) {
             isLoadedByOthers = true;
             return;
@@ -209,10 +214,14 @@ public class WinDivert {
     }
 
     private static void unloadSysForce() {
+        unloadSysForce(DRIVER_NAME);
+    }
+
+    private static void unloadSysForce(String driverName) {
         try {
             // ignore output and errors
-            Utils.execute(STR."sc.exe stop \{DRIVER_NAME}", true);
-            Utils.execute(STR."sc.exe delete \{DRIVER_NAME}", true);
+            Utils.execute(STR."sc.exe stop \{driverName}", true);
+            Utils.execute(STR."sc.exe delete \{driverName}", true);
         } catch (Throwable ignore) {
         }
     }
@@ -221,13 +230,15 @@ public class WinDivert {
         var all = new HashSet<String>();
         all.add(DRIVER_NAME);
         all.addAll(ALTERNATIVE_DRIVER_NAMES);
+        all.addAll(OLD_DRIVERS);
         for (var n : all) {
-            try {
-                // ignore output and errors
-                Utils.execute(STR."sc.exe stop \{n}", true);
-                Utils.execute(STR."sc.exe delete \{n}", true);
-            } catch (Exception ignore) {
-            }
+            unloadSysForce(n);
+        }
+    }
+
+    private static void unloadOldSys() {
+        for (var old : OLD_DRIVERS) {
+            unloadSysForce(old);
         }
     }
 
